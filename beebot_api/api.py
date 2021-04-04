@@ -15,20 +15,32 @@ table_names = {
     'user': User,
     'lands': Lands,
     'bees': Bees,
-    'behives': Beehives,
+    'beehives': Beehives,
     'honey': Honey
 }
 
 
+def configure_user(item: UserItem):
+    user = User()
+    user.telegram_id = item.telegram_id
+    user.lands = [Lands()]
+    user.bees = [Bees()]
+    user.beehives = [Beehives()]
+    user.honey = [Honey()]
+    return user
+
+
 @app.post("/users")
-async def create_user(item: UserItem, token=Header(None)):
+def create_user(item: UserItem, token=Header(None)):
     if token == API_TOKEN:
-        session = create_session()
         try:
-            user = User()
-            user.telegram_id = item.telegram_id
+            session = create_session()
+
+            user = configure_user(item)
+
             session.add(user)
             session.commit()
+
             return fastapi.responses.Response(status_code=200)
         except sa.exc.IntegrityError as exc:
             raise HTTPException(status_code=409,
@@ -41,12 +53,14 @@ async def create_user(item: UserItem, token=Header(None)):
 
 
 @app.get('/users')
-async def get_money(telegram_id: int, table_name: str, token=Header(None)):
+def get_money(telegram_id: int, table_name: str, token=Header(None)):
     if token == API_TOKEN:
         session = create_session()
         try:
             data = session.query(table_names[table_name]).filter(User.telegram_id == telegram_id).one()
+
             session.commit()
+
             return data.as_dict()
         finally:
             session.close()
