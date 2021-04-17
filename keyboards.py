@@ -27,3 +27,13 @@ class MarketKeyboard:
 
     def update(self):
         self.keyboard = InlineKeyboardMarkup(row_width=1).add(self.honey_count, self.exit)
+
+
+class ShopKeyboard:
+    bees_count = InlineKeyboardButton("NOT FOUND", callback_data='empty')
+    beehives_count = InlineKeyboardButton("NOT FOUND", callback_data="empty")
+    exit = InlineKeyboardButton("Назад", callback_data='main')
+    keyboard = InlineKeyboardMarkup(row_width=1).add(bees_count, exit)
+
+    def update(self):
+        self.keyboard = InlineKeyboardMarkup(row_width=1).add(self.bees_count, self.beehives_count, self.exit)

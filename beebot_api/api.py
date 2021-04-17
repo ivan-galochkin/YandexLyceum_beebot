@@ -8,6 +8,7 @@ from os import environ
 import datetime as dt
 import constants
 import uvicorn
+import json
 
 app = FastAPI()
 
@@ -43,28 +44,6 @@ def configure_user(item: UserItem):
     user.beehives = [Beehives()]
     user.honey = [Honey()]
     return user
-
-
-@app.post("/users")
-def create_user(item: UserItem, token=Header(None)):
-    if token == API_TOKEN:
-        try:
-            session = create_session()
-
-            user = configure_user(item)
-
-            session.add(user)
-            session.commit()
-
-            return fastapi.responses.Response(status_code=200)
-        except sa.exc.IntegrityError as exc:
-            raise HTTPException(status_code=409,
-                                detail={'exception': "UniqueError",
-                                        'column': str(exc.orig).split(' ')[-1]})
-        finally:
-            session.close()
-    else:
-        raise HTTPException(401, "INVALID TOKEN")
 
 
 def get_time_delta(telegram_id):
@@ -117,14 +96,46 @@ def sell_honey(telegram_id):
         session.close()
 
 
+def buy_item(telegram_id, table_name, item, count):
+    try:
+        session = create_session()
+
+        if "bee" in item and "hive" not in item:
+            beehives = session.query(Beehives).filter(Beehives.telegram_id == telegram_id).one()
+            all_beehives = beehives.small_beehives + beehives.medium_beehives + beehives.large_beehives
+            bee_count = sum(get_bees(telegram_id))
+            if all_beehives < bee_count / 100 + 1:
+                return 'Not enough storage'
+
+        cash = session.query(User).filter(User.telegram_id == telegram_id).one().balance
+
+        price = constants.ITEM_PRICES[item] * count
+
+        if price > cash:
+            return "Not enough cash"
+
+        table = table_names[table_name]
+        session.query(table).filter(table.telegram_id == telegram_id).update(
+            {getattr(table, item): getattr(table, item) + count})
+        session.query(User).filter(User.telegram_id == telegram_id).update({User.balance: cash - price})
+
+        session.commit()
+        return "200"
+    finally:
+        session.close()
+
+
 @app.put('/users')
-def update_userdata(telegram_id: int, table_name: str, column: str, value: int, mode: str, token=Header(None)):
+def update_userdata(telegram_id: int, table_name: str, item: str, count: int, mode: str, token=Header(None)):
     if token:
         if table_name == "unstable":
             update_unstable_values(telegram_id)
         else:
             if mode == "sell":
                 sell_honey(telegram_id)
+            elif mode == "buy":
+                response = buy_item(telegram_id, table_name, item, count)
+                return response
 
 
 @app.get('/users')
@@ -141,6 +152,28 @@ def get_userdata(telegram_id: int, table_name: str, token=Header(None)):
             session.close()
     else:
         return HTTPException(401, "INVALID TOKEN")
+
+
+@app.post("/users")
+def create_user(item: UserItem, token=Header(None)):
+    if token == API_TOKEN:
+        try:
+            session = create_session()
+
+            user = configure_user(item)
+
+            session.add(user)
+            session.commit()
+
+            return fastapi.responses.Response(status_code=200)
+        except sa.exc.IntegrityError as exc:
+            raise HTTPException(status_code=409,
+                                detail={'exception': "UniqueError",
+                                        'column': str(exc.orig).split(' ')[-1]})
+        finally:
+            session.close()
+    else:
+        raise HTTPException(401, "INVALID TOKEN")
 
 
 global_init('users.sqlite')

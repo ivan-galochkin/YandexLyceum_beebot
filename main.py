@@ -4,6 +4,7 @@ import json
 from keyboards import *
 from aiogram import Bot, Dispatcher, executor, types
 from stickers_dict import sticker_dictionary
+import asyncio
 
 bot = Bot(token=os.environ["BOT_TOKEN"])
 dp = Dispatcher(bot)
@@ -29,7 +30,6 @@ async def send_commands(message):
 
 async def keyboard_controller(callback_query):
     await bot.answer_callback_query(callback_query.id)
-    keyboard = False
     if callback_query.data == 'main':
         keyboard = MainCommandsKeyboard()
     elif callback_query.data == 'balance':
@@ -56,7 +56,35 @@ async def keyboard_controller(callback_query):
         keyboard = MarketKeyboard()
 
         keyboard.honey_count = InlineKeyboardButton(f"Продано! Кликните для обновления!", callback_data="market")
+    elif "buy" in callback_query.data:
+        item = callback_query.data[4:]
+        if "beehives" in item:
+            table = "beehives"
+            count = 1
+        else:
+            table = "bees"
+            count = 100
+        response = await put_request_api(callback_query.message, table, item, count, mode='buy')
 
+        keyboard = ShopKeyboard()
+        if response == "Not enough cash":
+            if "beehives" in item:
+                keyboard.beehives_count = InlineKeyboardButton("Недостаточно денег", callback_data="shop")
+            else:
+                keyboard.bees_count = InlineKeyboardButton("Недостаточно денег", callback_data="shop")
+        elif response == "Not enough storage":
+            keyboard.bees_count = InlineKeyboardButton("Постройте больше ульев", callback_data="shop")
+        else:
+            callback_query.data = "shop"
+
+    if callback_query.data == "shop":
+        bees = await get_request_api(callback_query.message, "bees")
+        beehives = await get_request_api(callback_query.message, "beehives")
+        keyboard = ShopKeyboard()
+
+        keyboard.bees_count = InlineKeyboardButton(bees['regular_bees'], callback_data="buy_regular_bees")
+        keyboard.beehives_count = InlineKeyboardButton(beehives['small_beehives'],
+                                                       callback_data="buy_small_beehives")
     if not keyboard:
         raise EmptyKeyboardError
     keyboard.update()
@@ -109,15 +137,16 @@ async def get_request_api(message, table_name):
         raise ServerDownError
 
 
-async def put_request_api(message, table_name='empty', column='empty', value=0, mode="update"):
+async def put_request_api(message, table_name='empty', item='empty', count=0, mode="update"):
     data = {"telegram_id": message.chat.id,
             "table_name": table_name,
-            "column": column,
-            "value": value,
+            "item": item,
+            "count": count,
             "mode": mode
             }
     try:
         response = requests.put("http://127.0.0.1:8000/users", params=data, headers=headers)
+        return response.json()
     except requests.exceptions.ConnectionError:
         raise ServerDownError
 
