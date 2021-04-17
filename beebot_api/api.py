@@ -5,7 +5,9 @@ from db_session import create_session, global_init
 from schemas import *
 import sqlalchemy as sa
 from os import environ
-import json
+import datetime as dt
+import constants
+import uvicorn
 
 app = FastAPI()
 
@@ -17,6 +19,19 @@ table_names = {
     'bees': Bees,
     'beehives': Beehives,
     'honey': Honey
+}
+
+unstable_values = {
+    Honey: Honey.honey
+}
+
+stable_values = {
+    'blue_bees': Bees.blue_bees,
+    'regular_bees': Bees.regular_bees,
+    'flower_land': Lands.forest_land,
+    'small_beehives': Beehives.small_beehives,
+    'medium_beehives': Beehives.medium_beehives,
+    'large_beehives': Beehives.large_beehives,
 }
 
 
@@ -52,15 +67,75 @@ def create_user(item: UserItem, token=Header(None)):
         raise HTTPException(401, "INVALID TOKEN")
 
 
+def get_time_delta(telegram_id):
+    session = create_session()
+    try:
+        time_now = dt.datetime.now()
+
+        time_last_check = session.query(User).filter(User.telegram_id == telegram_id).one().last_check
+
+        time_delta = time_now - time_last_check
+
+        return time_delta.total_seconds()
+    finally:
+        session.close()
+
+
+def get_bees(telegram_id):
+    session = create_session()
+    try:
+        bees = session.query(Bees).filter(Bees.telegram_id == telegram_id).one()
+        return [bees.regular_bees, bees.blue_bees]
+    finally:
+        session.close()
+
+
+def update_unstable_values(telegram_id):
+    time_delta = get_time_delta(telegram_id)
+    bees = get_bees(telegram_id)
+    accumulated = (bees[0] * constants.REGULAR_BEE_HPS + bees[1] * constants.BLUE_BEE_HPS) * time_delta
+    session = create_session()
+    try:
+        for table in unstable_values.keys():
+            session.query(table).filter(table.telegram_id == telegram_id).update(
+                {unstable_values[table]: unstable_values[table] + accumulated})
+        session.query(User).filter(User.telegram_id == telegram_id).update({User.last_check: dt.datetime.now()})
+        session.commit()
+    finally:
+        session.close()
+
+
+def sell_honey(telegram_id):
+    try:
+        session = create_session()
+        data = session.query(Honey).filter(Honey.telegram_id == telegram_id).one()
+        income = data.honey * constants.REGULAR_HONEY_COST
+        session.query(Honey).filter(Honey.telegram_id == telegram_id).update({"honey": 0})
+        session.query(User).filter(User.telegram_id == telegram_id).update({User.balance: User.balance + income})
+        session.commit()
+    finally:
+        session.close()
+
+
+@app.put('/users')
+def update_userdata(telegram_id: int, table_name: str, column: str, value: int, mode: str, token=Header(None)):
+    if token:
+        if table_name == "unstable":
+            update_unstable_values(telegram_id)
+        else:
+            if mode == "sell":
+                sell_honey(telegram_id)
+
+
 @app.get('/users')
-def get_money(telegram_id: int, table_name: str, token=Header(None)):
+def get_userdata(telegram_id: int, table_name: str, token=Header(None)):
     if token == API_TOKEN:
         session = create_session()
         try:
-            data = session.query(table_names[table_name]).filter(User.telegram_id == telegram_id).one()
 
+            data = session.query(table_names[table_name]).filter(
+                table_names[table_name].telegram_id == telegram_id).one()
             session.commit()
-
             return data.as_dict()
         finally:
             session.close()
@@ -69,3 +144,6 @@ def get_money(telegram_id: int, table_name: str, token=Header(None)):
 
 
 global_init('users.sqlite')
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

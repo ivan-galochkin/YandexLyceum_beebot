@@ -27,24 +27,51 @@ async def send_commands(message):
                            reply_markup=MainCommandsKeyboard.keyboard)
 
 
+async def keyboard_controller(callback_query):
+    await bot.answer_callback_query(callback_query.id)
+    keyboard = False
+    if callback_query.data == 'main':
+        keyboard = MainCommandsKeyboard()
+    elif callback_query.data == 'balance':
+        data = await get_request_api(callback_query.message, table_name='user')
+
+        rounded_cash = round(data['balance'])
+
+        keyboard = BalanceKeyboard()
+
+        keyboard.value = InlineKeyboardButton(f"{rounded_cash} ₽", callback_data='balance')
+
+    elif callback_query.data == "market":
+        await put_request_api(callback_query.message, "unstable")
+        data = await get_request_api(callback_query.message, table_name='honey')
+
+        keyboard = MarketKeyboard()
+
+        rounded_honey = round(data['honey'], 3)
+
+        keyboard.honey_count = InlineKeyboardButton(f"Накоплено мёда: {rounded_honey}", callback_data='sell_honey')
+    elif callback_query.data == "sell_honey":
+        await put_request_api(callback_query.message, mode='sell')
+
+        keyboard = MarketKeyboard()
+
+        keyboard.honey_count = InlineKeyboardButton(f"Продано! Кликните для обновления!", callback_data="market")
+
+    if not keyboard:
+        raise EmptyKeyboardError
+    keyboard.update()
+
+    return keyboard, callback_query.message
+
+
 @dp.callback_query_handler(lambda button: button.data)
 async def process_callback_commands(callback_query: types.CallbackQuery):
-    await bot.answer_callback_query(callback_query.id)
-
-    message = callback_query.message
-
-    if callback_query.data == 'main':
+    try:
+        keyboard, message = await keyboard_controller(callback_query)
         await bot.edit_message_reply_markup(message.chat.id, message.message_id,
-                                            reply_markup=MainCommandsKeyboard.keyboard)
-
-    elif callback_query.data == 'balance':
-        data = await get_request_api(message, table_name='user')
-        if data:
-            balance = data['balance']
-            balance_keyboard.value = InlineKeyboardButton(balance, callback_data='empty')
-            balance_keyboard.update()
-            await bot.edit_message_reply_markup(message.chat.id, message.message_id,
-                                                reply_markup=balance_keyboard.keyboard)
+                                            reply_markup=keyboard.keyboard)
+    except EmptyKeyboardError:
+        pass
 
 
 async def check_register(message: types.Message):
@@ -64,7 +91,7 @@ async def check_register(message: types.Message):
 
 async def post_request_api(message):
     try:
-        data = json.dumps({"telegram_id": message.from_user.id + 230})
+        data = json.dumps({"telegram_id": message.from_user.id})
         response = requests.post(f"http://127.0.0.1:8000/users", data=data, headers=headers)
         return response
     except ConnectionError:
@@ -73,13 +100,34 @@ async def post_request_api(message):
 
 
 async def get_request_api(message, table_name):
-    data = {"telegram_id": message.from_user.id,
+    data = {"telegram_id": message.chat.id,
             "table_name": table_name}
     try:
         response = requests.get(f"http://127.0.0.1:8000/users", params=data, headers=headers)
         return response.json()
     except requests.exceptions.ConnectionError:
-        await bot.send_message(message.chat.id, "Технические работы на сервере")
+        raise ServerDownError
+
+
+async def put_request_api(message, table_name='empty', column='empty', value=0, mode="update"):
+    data = {"telegram_id": message.chat.id,
+            "table_name": table_name,
+            "column": column,
+            "value": value,
+            "mode": mode
+            }
+    try:
+        response = requests.put("http://127.0.0.1:8000/users", params=data, headers=headers)
+    except requests.exceptions.ConnectionError:
+        raise ServerDownError
+
+
+class ServerDownError(BaseException):
+    pass
+
+
+class EmptyKeyboardError(BaseException):
+    pass
 
 
 executor.start_polling(dp)
