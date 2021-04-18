@@ -56,40 +56,50 @@ async def keyboard_controller(callback_query):
         keyboard = MarketKeyboard()
 
         keyboard.honey_count = InlineKeyboardButton(f"Продано! Кликните для обновления!", callback_data="market")
+    elif callback_query.data == "shop":
+        keyboard = await get_shop_data(callback_query.message)
     elif "buy" in callback_query.data:
-        item = callback_query.data[4:]
-        if "beehives" in item:
-            table = "beehives"
-            count = 1
-        else:
-            table = "bees"
-            count = 100
-        response = await put_request_api(callback_query.message, table, item, count, mode='buy')
+        keyboard = await buy_process(callback_query)
 
-        keyboard = ShopKeyboard()
-        if response == "Not enough cash":
-            if "beehives" in item:
-                keyboard.beehives_count = InlineKeyboardButton("Недостаточно денег", callback_data="shop")
-            else:
-                keyboard.bees_count = InlineKeyboardButton("Недостаточно денег", callback_data="shop")
-        elif response == "Not enough storage":
-            keyboard.bees_count = InlineKeyboardButton("Постройте больше ульев", callback_data="shop")
-        else:
-            callback_query.data = "shop"
-
-    if callback_query.data == "shop":
-        bees = await get_request_api(callback_query.message, "bees")
-        beehives = await get_request_api(callback_query.message, "beehives")
-        keyboard = ShopKeyboard()
-
-        keyboard.bees_count = InlineKeyboardButton(bees['regular_bees'], callback_data="buy_regular_bees")
-        keyboard.beehives_count = InlineKeyboardButton(beehives['small_beehives'],
-                                                       callback_data="buy_small_beehives")
     if not keyboard:
         raise EmptyKeyboardError
     keyboard.update()
 
     return keyboard, callback_query.message
+
+
+async def buy_process(callback_query):
+    item = callback_query.data[4:]
+    if "beehives" in item:
+        table = "beehives"
+        count = 1
+    else:
+        table = "bees"
+        count = 100
+    response = await put_request_api(callback_query.message, table, item, count, mode='buy')
+
+    keyboard = await get_shop_data(callback_query.message)
+
+    if response == "Not enough cash":
+        if "beehives" in item:
+            keyboard.beehives_count = InlineKeyboardButton("Недостаточно денег", callback_data="shop")
+        else:
+            keyboard.bees_count = InlineKeyboardButton("Недостаточно денег", callback_data="shop")
+    elif response == "Not enough storage":
+        keyboard.bees_count = InlineKeyboardButton("Постройте больше ульев", callback_data="shop")
+
+    return keyboard
+
+
+async def get_shop_data(message):
+    bees = await get_request_api(message, "bees")
+    beehives = await get_request_api(message, "beehives")
+    keyboard = ShopKeyboard()
+
+    keyboard.bees_count = InlineKeyboardButton(bees['regular_bees'], callback_data="buy_regular_bees")
+    keyboard.beehives_count = InlineKeyboardButton(beehives['small_beehives'],
+                                                   callback_data="buy_small_beehives")
+    return keyboard
 
 
 @dp.callback_query_handler(lambda button: button.data)
