@@ -11,6 +11,8 @@ dp = Dispatcher(bot)
 
 API_TOKEN = os.environ["API_TOKEN"]
 
+server_ip = "127.0.0.1"
+
 headers = {'token': API_TOKEN}
 
 balance_keyboard = BalanceKeyboard()
@@ -96,8 +98,9 @@ async def get_shop_data(message):
     beehives = await get_request_api(message, "beehives")
     keyboard = ShopKeyboard()
 
-    keyboard.bees_count = InlineKeyboardButton(bees['regular_bees'], callback_data="buy_regular_bees")
-    keyboard.beehives_count = InlineKeyboardButton(beehives['small_beehives'],
+    keyboard.bees_count = InlineKeyboardButton(f"Количество пчел: {bees['regular_bees']}",
+                                               callback_data="buy_regular_bees")
+    keyboard.beehives_count = InlineKeyboardButton(f"Количество ульев: {beehives['small_beehives']}",
                                                    callback_data="buy_small_beehives")
     return keyboard
 
@@ -130,7 +133,7 @@ async def check_register(message: types.Message):
 async def post_request_api(message):
     try:
         data = json.dumps({"telegram_id": message.from_user.id})
-        response = requests.post(f"http://127.0.0.1:8000/users", data=data, headers=headers)
+        response = requests.post(f"http://{server_ip}:8000/users", data=data, headers=headers)
         return response
     except ConnectionError:
         await bot.send_message(message.chat.id, "Технические работы на сервере")
@@ -141,7 +144,7 @@ async def get_request_api(message, table_name):
     data = {"telegram_id": message.chat.id,
             "table_name": table_name}
     try:
-        response = requests.get(f"http://127.0.0.1:8000/users", params=data, headers=headers)
+        response = requests.get(f"http://{server_ip}:8000/users", params=data, headers=headers)
         return response.json()
     except requests.exceptions.ConnectionError:
         raise ServerDownError
@@ -155,7 +158,7 @@ async def put_request_api(message, table_name='empty', item='empty', count=0, mo
             "mode": mode
             }
     try:
-        response = requests.put("http://127.0.0.1:8000/users", params=data, headers=headers)
+        response = requests.put(f"http://{server_ip}:8000/users", params=data, headers=headers)
         return response.json()
     except requests.exceptions.ConnectionError:
         raise ServerDownError
