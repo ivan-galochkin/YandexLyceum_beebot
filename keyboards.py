@@ -1,6 +1,10 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
+# Файл, в котором хранятся шаблоны клавиатур
+# И нет, я не мог сделать один класс и унаследовать от него функцию update для всех клавиатур
+# я пробовал, клавиатуры просто ломались и не работали
+
 class MainCommandsKeyboard:
     balance = InlineKeyboardButton("Баланс 💵", callback_data='balance')
     shop = InlineKeyboardButton("Магазин 🛒", callback_data='shop')

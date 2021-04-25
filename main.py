@@ -26,11 +26,16 @@ async def send_welcome(message: types.Message):
 
 @dp.message_handler(commands=['help'])
 async def send_commands(message):
+    """Отправляет стикер и клавиатуру с главным меню"""
     await bot.send_sticker(message.chat.id, sticker_dictionary['cool'],
                            reply_markup=MainCommandsKeyboard.keyboard)
 
 
 async def keyboard_controller(callback_query):
+    """
+    Функция, которая обрабатывает нажатия кнопок
+    :returns InlineKeyboardMarkup, message:str
+    """
     await bot.answer_callback_query(callback_query.id)
     if callback_query.data == 'main':
         keyboard = MainCommandsKeyboard()
@@ -71,6 +76,10 @@ async def keyboard_controller(callback_query):
 
 
 async def buy_process(callback_query):
+    """
+    Отвечает за запрос, обработку данных при покупке, которые пришли от сервера
+    :return: InlineKeyboardMarkup
+    """
     item = callback_query.data[4:]
     if "beehives" in item:
         table = "beehives"
@@ -94,6 +103,10 @@ async def buy_process(callback_query):
 
 
 async def get_shop_data(message):
+    """
+    Получает данные о количестве пчел и ульев у пользователя
+    :return InlineKeyboardMarkup
+    """
     bees = await get_request_api(message, "bees")
     beehives = await get_request_api(message, "beehives")
     keyboard = ShopKeyboard()
@@ -107,6 +120,11 @@ async def get_shop_data(message):
 
 @dp.callback_query_handler(lambda button: button.data)
 async def process_callback_commands(callback_query: types.CallbackQuery):
+    """
+    Пункт перед контроллером, здесь происходит отправка события нажатия на контроллер,
+    а также изменение клавиатуры у пользователя
+    :return: None
+    """
     try:
         keyboard, message = await keyboard_controller(callback_query)
         await bot.edit_message_reply_markup(message.chat.id, message.message_id,
@@ -116,6 +134,9 @@ async def process_callback_commands(callback_query: types.CallbackQuery):
 
 
 async def check_register(message: types.Message):
+    """
+    Проверяет, зарегестрирован ли пользователь
+    """
     response = await post_request_api(message)
     if response.status_code == 409:
         await bot.send_message(message.chat.id, "Вы уже зарегистрированы 🐝")
@@ -131,6 +152,9 @@ async def check_register(message: types.Message):
 
 
 async def post_request_api(message):
+    """
+    Отвечает за добавление данных, на деле используется только при регистрации
+    """
     try:
         data = json.dumps({"telegram_id": message.from_user.id})
         response = requests.post(f"http://{server_ip}:8000/users", data=data, headers=headers)
@@ -141,6 +165,9 @@ async def post_request_api(message):
 
 
 async def get_request_api(message, table_name):
+    """
+    Отвечает за получение данных с сервера
+    """
     data = {"telegram_id": message.chat.id,
             "table_name": table_name}
     try:
@@ -151,6 +178,15 @@ async def get_request_api(message, table_name):
 
 
 async def put_request_api(message, table_name='empty', item='empty', count=0, mode="update"):
+    """
+    Отвечает за обновление данных на сервере
+    :param message: сообщение types.Message
+    :param table_name: название таблицы в бд
+    :param item: какую колонку мы хотим изменить
+    :param count: на какое количество хотим изменить
+    :param mode: update или sell
+    :return: response.json()
+    """
     data = {"telegram_id": message.chat.id,
             "table_name": table_name,
             "item": item,
@@ -165,10 +201,16 @@ async def put_request_api(message, table_name='empty', item='empty', count=0, mo
 
 
 class ServerDownError(BaseException):
+    """
+    Если сервер не отвечает
+    """
     pass
 
 
 class EmptyKeyboardError(BaseException):
+    """
+    Если клавиатура не изменилась
+    """
     pass
 
 

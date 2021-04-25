@@ -140,6 +140,12 @@ def update_userdata(telegram_id: int, table_name: str, item: str, count: int, mo
 
 @app.get('/users')
 def get_userdata(telegram_id: int, table_name: str, token=Header(None)):
+    """
+    :param telegram_id: телехрам айди
+    :param table_name: название таблицы
+    :param token: токен
+    :return:
+    """
     if token == API_TOKEN:
         session = create_session()
         try:
